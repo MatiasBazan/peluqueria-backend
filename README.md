@@ -7,6 +7,7 @@ Backend del sistema de reserva de turnos para una peluqueria con varios profesio
 - Java 21
 - Spring Boot 3.3.x (Web, Data JPA, Security, Validation)
 - MySQL 8 (`mysql-connector-j`)
+- Flyway (migraciones de esquema versionadas)
 - JWT (`jjwt` 0.12.x)
 - springdoc-openapi (Swagger UI)
 - Lombok
@@ -44,7 +45,7 @@ CREATE DATABASE peluqueria CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 -- Si usas root, el dev profile ya esta listo con root/root por defecto.
 ```
 
-El profile `dev` apunta a `localhost:3306/peluqueria` y crea la BD si no existe (`createDatabaseIfNotExist=true`).
+El profile `dev` apunta a `localhost:3306/peluqueria` y crea la BD si no existe (`createDatabaseIfNotExist=true`). El esquema (tablas) lo crea **Flyway** al arrancar; Hibernate solo valida (`ddl-auto: validate`).
 
 ## Variables de entorno (opcionales)
 
@@ -137,17 +138,28 @@ Genera `target/peluqueria-backend-0.0.1-SNAPSHOT.jar` ejecutable:
 java -jar target/peluqueria-backend-0.0.1-SNAPSHOT.jar
 ```
 
+## Migraciones (Flyway)
+
+El esquema esta versionado con Flyway en `src/main/resources/db/migration`. Las migraciones se
+aplican automaticamente al arrancar la app (antes de que Hibernate valide el modelo).
+
+- `V1__init.sql` crea el esquema inicial (usuarios, servicios, profesionales, clientes, horarios, turnos y la tabla puente `profesional_servicio`).
+- Para evolucionar el esquema agrega un archivo nuevo siguiendo el patron `V{n}__descripcion.sql` (por ejemplo `V2__agrega_columna_x.sql`). Nunca edites una migracion ya aplicada.
+- `baseline-on-migrate: true` permite adoptar Flyway sobre una BD que ya existia (creada por el viejo `ddl-auto: update`): si el esquema no esta vacio y no hay historial, lo marca como baseline en vez de fallar.
+- Hibernate corre con `ddl-auto: validate` en todos los profiles: ya no crea ni modifica tablas, solo verifica que el modelo JPA coincida con el esquema migrado.
+
+> El DDL de `V1` se genero a partir del propio modelo JPA (Hibernate 6.5 / MySQLDialect), por eso coincide exactamente con lo que `validate` espera (incluido el mapeo de enums a `enum(...)` nativo de MySQL y de `boolean` a `bit`).
+
 ## Notas de produccion
 
 - Setea `SPRING_PROFILES_ACTIVE=prod` y todas las variables de entorno (DB y JWT son obligatorias).
 - `app.seed` queda en `false` en prod (no se cargan datos demo).
-- `ddl-auto: validate` en prod: la BD debe estar migrada antes (idealmente con Flyway/Liquibase en una iteracion futura).
+- El esquema lo gestiona Flyway: las migraciones se aplican al arrancar y luego Hibernate valida (`ddl-auto: validate`).
 - Cambia `APP_CORS_ALLOWED_ORIGINS` para incluir el dominio real del frontend.
 - Usa un `APP_JWT_SECRET` largo y aleatorio (>= 32 bytes).
 
 ## Proximos pasos (out of scope de este entregable)
 
 - Integracion real con WhatsApp via Meta API o Twilio (la abstraccion ya esta lista; basta una nueva impl con otro `notificacion.provider`).
-- Migraciones con Flyway.
 - Tests de integracion con `@SpringBootTest` + H2.
 - Rate limiting en endpoints publicos de reserva.
